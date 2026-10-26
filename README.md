@@ -1,11 +1,10 @@
-# GreenCode - Plataforma de Logística Reversa de Resíduos Eletrônicos (AV2)
+# GreenCode AV2
 
 ## Identificação do Projeto Acadêmico
 - **Aluno:** João Gabriel Barros Guimarães
-- **Curso:** Desenvolvimento de Software Multiplataforma (2º DSM)
+- **Curso:** Desenvolvimento de Software Multiplataforma
 - **Disciplina:** Técnicas de Programação I
-- **Professor:** Prof. Dr. Eng. Gerson Penha
-- **Avaliação:** Atividade de Avaliação Individual 2 (AV2)
+- **Professor:** Prof. Gerson Penha
 
 ---
 
