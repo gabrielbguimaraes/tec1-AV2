@@ -3,10 +3,13 @@ import { memDb, MemOrganizacao, MemContrato } from "./inMemoryDb";
 import { ConflitoError, NaoEncontradoError } from "../domain/errors/AppError";
 
 export interface DadosCriarContrato {
-  dataInicio: Date;
-  dataVencimento: Date;
-  valorTotal: number;
+  dataInicio?: Date | string;
+  dataAssinatura?: Date | string;
+  dataVencimento: Date | string;
+  valorTotal?: number;
+  valorMensal?: number;
   renovacaoAutomatica?: boolean;
+  clausulas?: string[];
 }
 
 export interface DadosCriarOrganizacao {
@@ -31,6 +34,14 @@ export interface DadosAtualizarOrganizacao {
 export interface OrganizacaoComRelacoes extends MemOrganizacao {
   contrato?: MemContrato | null;
   lotes?: unknown[];
+}
+
+function normalizarDadosContrato(dados: DadosCriarContrato) {
+  const dataInicio = new Date(dados.dataInicio || dados.dataAssinatura || new Date());
+  const dataVencimento = new Date(dados.dataVencimento);
+  const valorTotal = dados.valorTotal ?? dados.valorMensal ?? 0;
+  const clausulas = dados.clausulas ?? [];
+  return { dataInicio, dataVencimento, valorTotal, clausulas, renovacaoAutomatica: dados.renovacaoAutomatica ?? false };
 }
 
 export class RepositorioOrganizacao {
@@ -89,13 +100,15 @@ export class RepositorioOrganizacao {
 
         let contratoCriado: MemContrato | null = null;
         if (dados.contrato) {
+          const norm = normalizarDadosContrato(dados.contrato);
           const c = await tx.contrato.create({
             data: {
               organizacaoId: org.id,
-              dataInicio: new Date(dados.contrato.dataInicio),
-              dataVencimento: new Date(dados.contrato.dataVencimento),
-              valorTotal: dados.contrato.valorTotal,
-              renovacaoAutomatica: dados.contrato.renovacaoAutomatica ?? false,
+              dataInicio: norm.dataInicio,
+              dataVencimento: norm.dataVencimento,
+              valorTotal: norm.valorTotal,
+              renovacaoAutomatica: norm.renovacaoAutomatica,
+              clausulas: norm.clausulas,
               versao: 1
             }
           });
@@ -124,13 +137,15 @@ export class RepositorioOrganizacao {
 
     let contratoCriado: MemContrato | null = null;
     if (dados.contrato) {
+      const norm = normalizarDadosContrato(dados.contrato);
       contratoCriado = {
         id: memDb.gerarId(),
         organizacaoId: novaOrg.id,
-        dataInicio: new Date(dados.contrato.dataInicio),
-        dataVencimento: new Date(dados.contrato.dataVencimento),
-        valorTotal: dados.contrato.valorTotal,
-        renovacaoAutomatica: dados.contrato.renovacaoAutomatica ?? false,
+        dataInicio: norm.dataInicio,
+        dataVencimento: norm.dataVencimento,
+        valorTotal: norm.valorTotal,
+        renovacaoAutomatica: norm.renovacaoAutomatica,
+        clausulas: norm.clausulas,
         versao: 1,
         criadoEm: agora,
         atualizadoEm: agora
@@ -213,22 +228,26 @@ export class RepositorioOrganizacao {
       throw new NaoEncontradoError("Organização não encontrada.");
     }
 
+    const norm = normalizarDadosContrato(dados);
+
     if (await checkDatabaseConnection()) {
       return prisma.contrato.upsert({
         where: { organizacaoId },
         create: {
           organizacaoId,
-          dataInicio: new Date(dados.dataInicio),
-          dataVencimento: new Date(dados.dataVencimento),
-          valorTotal: dados.valorTotal,
-          renovacaoAutomatica: dados.renovacaoAutomatica ?? false,
+          dataInicio: norm.dataInicio,
+          dataVencimento: norm.dataVencimento,
+          valorTotal: norm.valorTotal,
+          renovacaoAutomatica: norm.renovacaoAutomatica,
+          clausulas: norm.clausulas,
           versao: 1
         },
         update: {
-          dataInicio: new Date(dados.dataInicio),
-          dataVencimento: new Date(dados.dataVencimento),
-          valorTotal: dados.valorTotal,
-          renovacaoAutomatica: dados.renovacaoAutomatica ?? false,
+          dataInicio: norm.dataInicio,
+          dataVencimento: norm.dataVencimento,
+          valorTotal: norm.valorTotal,
+          renovacaoAutomatica: norm.renovacaoAutomatica,
+          clausulas: norm.clausulas,
           versao: { increment: 1 }
         }
       }) as Promise<MemContrato>;
@@ -241,10 +260,11 @@ export class RepositorioOrganizacao {
       const existente = memDb.contratos[indexExistente];
       const atualizado: MemContrato = {
         ...existente,
-        dataInicio: new Date(dados.dataInicio),
-        dataVencimento: new Date(dados.dataVencimento),
-        valorTotal: dados.valorTotal,
-        renovacaoAutomatica: dados.renovacaoAutomatica ?? false,
+        dataInicio: norm.dataInicio,
+        dataVencimento: norm.dataVencimento,
+        valorTotal: norm.valorTotal,
+        renovacaoAutomatica: norm.renovacaoAutomatica,
+        clausulas: norm.clausulas,
         versao: existente.versao + 1,
         atualizadoEm: agora
       };
@@ -255,10 +275,11 @@ export class RepositorioOrganizacao {
     const novo: MemContrato = {
       id: memDb.gerarId(),
       organizacaoId,
-      dataInicio: new Date(dados.dataInicio),
-      dataVencimento: new Date(dados.dataVencimento),
-      valorTotal: dados.valorTotal,
-      renovacaoAutomatica: dados.renovacaoAutomatica ?? false,
+      dataInicio: norm.dataInicio,
+      dataVencimento: norm.dataVencimento,
+      valorTotal: norm.valorTotal,
+      renovacaoAutomatica: norm.renovacaoAutomatica,
+      clausulas: norm.clausulas,
       versao: 1,
       criadoEm: agora,
       atualizadoEm: agora

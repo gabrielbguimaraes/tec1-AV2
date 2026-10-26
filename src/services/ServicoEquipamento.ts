@@ -4,7 +4,7 @@ import {
 } from "../repositories/RepositorioEquipamento";
 import { RepositorioLote } from "../repositories/RepositorioLote";
 import { RepositorioJournal } from "../repositories/RepositorioJournal";
-import { EstadoFisico, calcularDiferencaEstadoFisico } from "../domain/enums/EstadoFisico";
+import { EstadoFisico } from "../domain/enums/EstadoFisico";
 import { StatusRastreamento } from "../domain/enums/StatusRastreamento";
 import { TipoEquipamento } from "../domain/enums/TipoEquipamento";
 import { Equipamento } from "../domain/entities/Equipamento";
@@ -64,37 +64,38 @@ export class ServicoEquipamento {
     const atual = await this.repoEquipamento.buscarPorId(id);
     if (!atual) throw new NaoEncontradoError("Equipamento não encontrado.");
 
-    const diferenca = calcularDiferencaEstadoFisico(atual.estadoFisico, novoEstado);
-
-    if (diferenca >= 2 && (!justificativa || !justificativa.trim())) {
-      throw new RequisicaoInvalidaError(
-        "Degradação severa de estado físico (queda de 2 ou mais níveis) requer justificativa textual obrigatória."
+    try {
+      const eqEntidade = new Equipamento(
+        atual.id,
+        atual.codigoBarrasInterno,
+        atual.tipo,
+        atual.marca,
+        atual.modelo,
+        atual.pesoKg,
+        atual.estadoFisico,
+        atual.precificacaoEstimada,
+        atual.status,
+        atual.loteId,
+        atual.versao,
+        atual.anoFabricacao,
+        atual.posicaoNoLote
       );
+
+      eqEntidade.atualizarEstadoFisico(novoEstado, justificativa);
+    } catch (err: any) {
+      throw new RequisicaoInvalidaError(err.message);
     }
 
-    const atualizado = await this.repoEquipamento.atualizar(id, versaoEsperada, {
-      estadoFisico: novoEstado
-    });
-
-    await this.repoEquipamento.registrarMovimentacao({
-      equipamentoId: id,
-      origem: `Estado: ${atual.estadoFisico}`,
-      destino: `Estado: ${novoEstado}`,
-      responsavel: operador,
-      observacoes: justificativa ? `Reclassificação de estado: ${justificativa}` : "Reclassificação de estado físico"
-    });
-
-    await this.repoJournal.registrar({
-      operacao: "ATUALIZAR_ESTADO_FISICO",
-      entidade: "Equipamento",
+    return this.repoEquipamento.atualizarEstadoFisicoTransacional(
+      id,
+      versaoEsperada,
+      novoEstado,
+      `Estado: ${atual.estadoFisico}`,
+      `Estado: ${novoEstado}`,
       operador,
-      ipOrigem,
-      dadosAntes: atual,
-      dadosDepois: atualizado,
-      sucesso: true
-    });
-
-    return atualizado;
+      justificativa,
+      ipOrigem
+    );
   }
 
   async transitarStatus(
@@ -110,38 +111,38 @@ export class ServicoEquipamento {
     const atual = await this.repoEquipamento.buscarPorId(id);
     if (!atual) throw new NaoEncontradoError("Equipamento não encontrado.");
 
-    if (
-      (novoStatus === StatusRastreamento.AGUARDANDO_DESMONTE || novoStatus === StatusRastreamento.EM_DESMONTE) &&
-      atual.status === StatusRastreamento.AGUARDANDO_TRIAGEM
-    ) {
-      throw new RequisicaoInvalidaError(
-        "Transição inválida: o equipamento precisa passar por triagem antes de ir para desmonte."
+    try {
+      const eqEntidade = new Equipamento(
+        atual.id,
+        atual.codigoBarrasInterno,
+        atual.tipo,
+        atual.marca,
+        atual.modelo,
+        atual.pesoKg,
+        atual.estadoFisico,
+        atual.precificacaoEstimada,
+        atual.status,
+        atual.loteId,
+        atual.versao,
+        atual.anoFabricacao,
+        atual.posicaoNoLote
       );
+
+      eqEntidade.atualizarStatus(novoStatus, observacoes);
+    } catch (err: any) {
+      throw new RequisicaoInvalidaError(err.message);
     }
 
-    const atualizado = await this.repoEquipamento.atualizar(id, versaoEsperada, {
-      status: novoStatus
-    });
-
-    await this.repoEquipamento.registrarMovimentacao({
-      equipamentoId: id,
+    return this.repoEquipamento.transitarStatusTransacional(
+      id,
+      versaoEsperada,
+      novoStatus,
       origem,
       destino,
-      responsavel: operador,
-      observacoes: observacoes ?? `Transição de status para ${novoStatus}`
-    });
-
-    await this.repoJournal.registrar({
-      operacao: "TRANSITAR_STATUS_EQUIPAMENTO",
-      entidade: "Equipamento",
       operador,
-      ipOrigem,
-      dadosAntes: atual,
-      dadosDepois: atualizado,
-      sucesso: true
-    });
-
-    return atualizado;
+      observacoes,
+      ipOrigem
+    );
   }
 
   async obterPorId(id: string) {
@@ -177,7 +178,9 @@ export class ServicoEquipamento {
       eq.precificacaoEstimada,
       eq.status,
       eq.loteId,
-      eq.versao
+      eq.versao,
+      eq.anoFabricacao,
+      eq.posicaoNoLote
     );
 
     const valorAposDepreciacao = entidade.calcularDepreciacao();

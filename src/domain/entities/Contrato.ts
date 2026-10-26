@@ -6,7 +6,8 @@ export class Contrato {
     public dataVencimento: Date,
     public valorTotal: number,
     public renovacaoAutomatica: boolean = false,
-    public versao: number = 1
+    public versao: number = 1,
+    public clausulas: string[] = []
   ) {}
 
   estaVigente(): boolean {
@@ -14,9 +15,10 @@ export class Contrato {
     return agora >= this.dataInicio && agora <= this.dataVencimento;
   }
 
-  renovar(mesesAdicionais: number = 12): void {
-    const novaData = new Date(this.dataVencimento);
-    novaData.setMonth(novaData.getMonth() + mesesAdicionais);
-    this.dataVencimento = novaData;
+  renovar(novoVencimento: Date): void {
+    if (novoVencimento <= this.dataVencimento) {
+      throw new Error("Novo vencimento deve ser posterior ao vencimento atual.");
+    }
+    this.dataVencimento = novoVencimento;
   }
 }

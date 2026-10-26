@@ -28,6 +28,12 @@ export async function executarSeed() {
   const vinteDiasAtras = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000);
   const dataFimContrato = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
+  const clausulasPadrao = [
+    "Descarte ambientalmente correto conforme Lei 12.305/2010 (PNRS)",
+    "Sanitização e destruição segura de dados sob termos da LGPD",
+    "Emissão periódica de Certificados de Destinação Final (CDF)"
+  ];
+
   const dbOnline = await checkDatabaseConnection();
 
   if (dbOnline) {
@@ -55,13 +61,14 @@ export async function executarSeed() {
 
     await prisma.contrato.upsert({
       where: { organizacaoId: org1.id },
-      update: { valorTotal: 150000.0 },
+      update: { valorTotal: 150000.0, clausulas: clausulasPadrao },
       create: {
         organizacaoId: org1.id,
         dataInicio: vinteDiasAtras,
         dataVencimento: dataFimContrato,
         valorTotal: 150000.0,
         renovacaoAutomatica: true,
+        clausulas: clausulasPadrao,
         versao: 1
       }
     });
@@ -85,6 +92,7 @@ export async function executarSeed() {
       update: { statusProcessamento: StatusLote.RECEBIDO },
       create: {
         numeroLote: "LOTE-2026-001",
+        notaFiscal: "NF-2026-001",
         organizacaoId: org1.id,
         dataEntrada: dezDiasAtras,
         transportadora: "Transportes EcoRápido",
@@ -99,11 +107,12 @@ export async function executarSeed() {
       update: { statusProcessamento: StatusLote.TRIAGEM_CONCLUIDA },
       create: {
         numeroLote: "LOTE-2026-002",
+        notaFiscal: "NF-2026-002",
         organizacaoId: org2.id,
         dataEntrada: vinteDiasAtras,
         transportadora: "Logística Express Verde",
         statusProcessamento: StatusLote.TRIAGEM_CONCLUIDA,
-        observacoes: "Lote de triagem com monitores e fontes",
+        observacoes: "Lote de triagem com monitores e cabeamento estruturado",
         versao: 1
       }
     });
@@ -121,6 +130,8 @@ export async function executarSeed() {
         estadoFisico: EstadoFisico.BOM_ESTADO,
         precificacaoEstimada: 4500.0,
         status: StatusRastreamento.AGUARDANDO_TRIAGEM,
+        anoFabricacao: 2021,
+        posicaoNoLote: 1,
         versao: 1
       }
     });
@@ -135,9 +146,11 @@ export async function executarSeed() {
         marca: "Lenovo",
         modelo: "ThinkPad T480",
         pesoKg: 1.6,
-        estadoFisico: EstadoFisico.DESGASTADO,
+        estadoFisico: EstadoFisico.USADO_LEVE,
         precificacaoEstimada: 1200.0,
         status: StatusRastreamento.EM_TRIAGEM,
+        anoFabricacao: 2020,
+        posicaoNoLote: 1,
         versao: 1
       }
     });
@@ -212,6 +225,7 @@ export async function executarSeed() {
     dataVencimento: dataFimContrato,
     valorTotal: 150000.0,
     renovacaoAutomatica: true,
+    clausulas: clausulasPadrao,
     versao: 1,
     criadoEm: agora,
     atualizadoEm: agora
@@ -236,6 +250,7 @@ export async function executarSeed() {
   memDb.lotes.push({
     id: loteId1,
     numeroLote: "LOTE-2026-001",
+    notaFiscal: "NF-2026-001",
     organizacaoId: orgId1,
     dataEntrada: dezDiasAtras,
     transportadora: "Transportes EcoRápido",
@@ -250,11 +265,12 @@ export async function executarSeed() {
   memDb.lotes.push({
     id: loteId2,
     numeroLote: "LOTE-2026-002",
+    notaFiscal: "NF-2026-002",
     organizacaoId: orgId2,
     dataEntrada: vinteDiasAtras,
     transportadora: "Logística Express Verde",
     statusProcessamento: StatusLote.TRIAGEM_CONCLUIDA,
-    observacoes: "Lote de triagem com monitores e fontes",
+    observacoes: "Lote de triagem com monitores e cabeamento estruturado",
     versao: 1,
     criadoEm: agora,
     atualizadoEm: agora
@@ -272,6 +288,8 @@ export async function executarSeed() {
     estadoFisico: EstadoFisico.BOM_ESTADO,
     precificacaoEstimada: 4500.0,
     status: StatusRastreamento.AGUARDANDO_TRIAGEM,
+    anoFabricacao: 2021,
+    posicaoNoLote: 1,
     versao: 1,
     criadoEm: agora,
     atualizadoEm: agora
@@ -286,9 +304,11 @@ export async function executarSeed() {
     marca: "Lenovo",
     modelo: "ThinkPad T480",
     pesoKg: 1.6,
-    estadoFisico: EstadoFisico.DESGASTADO,
+    estadoFisico: EstadoFisico.USADO_LEVE,
     precificacaoEstimada: 1200.0,
     status: StatusRastreamento.EM_TRIAGEM,
+    anoFabricacao: 2020,
+    posicaoNoLote: 1,
     versao: 1,
     criadoEm: agora,
     atualizadoEm: agora

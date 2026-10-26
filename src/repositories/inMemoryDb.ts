@@ -1,5 +1,4 @@
 import { randomUUID } from "crypto";
-import { ConflitoError, NaoEncontradoError } from "../domain/errors/AppError";
 import { PapelUsuario } from "../domain/enums/PapelUsuario";
 import { StatusLote } from "../domain/enums/StatusLote";
 import { TipoEquipamento } from "../domain/enums/TipoEquipamento";
@@ -25,6 +24,7 @@ export interface MemContrato {
   dataVencimento: Date;
   valorTotal: number;
   renovacaoAutomatica: boolean;
+  clausulas: string[] | unknown;
   versao: number;
   criadoEm: Date;
   atualizadoEm: Date;
@@ -47,6 +47,7 @@ export interface MemOrganizacao {
 export interface MemLote {
   id: string;
   numeroLote: string;
+  notaFiscal: string;
   organizacaoId: string;
   dataEntrada: Date;
   transportadora: string;
@@ -67,6 +68,8 @@ export interface MemEquipamento {
   estadoFisico: EstadoFisico;
   precificacaoEstimada: number;
   status: StatusRastreamento;
+  anoFabricacao: number;
+  posicaoNoLote: number;
   loteId: string;
   versao: number;
   criadoEm: Date;

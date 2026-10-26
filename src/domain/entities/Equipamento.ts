@@ -16,10 +16,12 @@ export class Equipamento {
     public status: StatusRastreamento = StatusRastreamento.AGUARDANDO_TRIAGEM,
     public loteId: string = "",
     public versao: number = 1,
+    public anoFabricacao: number = 2022,
+    public posicaoNoLote: number = 1,
     public movimentacoes: Movimentacao[] = []
   ) {}
 
-  transitarPara(novoStatus: StatusRastreamento): void {
+  atualizarStatus(novoStatus: StatusRastreamento, justificativa?: string): void {
     if (
       (novoStatus === StatusRastreamento.AGUARDANDO_DESMONTE || novoStatus === StatusRastreamento.EM_DESMONTE) &&
       this.status === StatusRastreamento.AGUARDANDO_TRIAGEM
@@ -27,6 +29,10 @@ export class Equipamento {
       throw new Error("Equipamento deve passar por triagem antes de transitar para desmonte.");
     }
     this.status = novoStatus;
+  }
+
+  transitarPara(novoStatus: StatusRastreamento): void {
+    this.atualizarStatus(novoStatus);
   }
 
   atualizarEstadoFisico(novoEstado: EstadoFisico, justificativa?: string): void {
@@ -43,7 +49,7 @@ export class Equipamento {
     origem: string,
     destino: string,
     responsavel: string,
-    observacoes?: string
+    observacao?: string
   ): Movimentacao {
     const mov = new Movimentacao(
       "",
@@ -52,7 +58,7 @@ export class Equipamento {
       origem,
       destino,
       responsavel,
-      observacoes
+      observacao
     );
     this.movimentacoes.push(mov);
     return mov;
@@ -62,11 +68,11 @@ export class Equipamento {
     const fatores: Record<EstadoFisico, number> = {
       [EstadoFisico.NOVO]: 0.0,
       [EstadoFisico.BOM_ESTADO]: 0.1,
-      [EstadoFisico.DESGASTADO]: 0.25,
-      [EstadoFisico.ESTADO_RUIM]: 0.45,
+      [EstadoFisico.USADO_LEVE]: 0.25,
+      [EstadoFisico.USADO_MODERADO]: 0.45,
       [EstadoFisico.DANIFICADO_LEVE]: 0.65,
       [EstadoFisico.DANIFICADO_GRAVE]: 0.85,
-      [EstadoFisico.SUCATA_DEFINITIVA]: 0.98
+      [EstadoFisico.INSERVIVEL]: 0.98
     };
 
     const depreciacao = fatores[this.estadoFisico] ?? 0;

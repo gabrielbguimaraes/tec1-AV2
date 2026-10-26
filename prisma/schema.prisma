@@ -18,7 +18,7 @@ enum StatusLote {
   RECEBIDO
   EM_TRIAGEM
   TRIAGEM_CONCLUIDA
-  DESMEMBRADO
+  ENCAMINHADO
   FINALIZADO
 }
 
@@ -29,18 +29,18 @@ enum TipoEquipamento {
   IMPRESSORA
   SERVIDOR
   ROTEADOR
-  SMARTPHONE
+  CABO_ESTRUTURADO
   FONTE_ALIMENTACAO
 }
 
 enum EstadoFisico {
   NOVO
   BOM_ESTADO
-  DESGASTADO
-  ESTADO_RUIM
+  USADO_LEVE
+  USADO_MODERADO
   DANIFICADO_LEVE
   DANIFICADO_GRAVE
-  SUCATA_DEFINITIVA
+  INSERVIVEL
 }
 
 enum StatusRastreamento {
@@ -50,7 +50,7 @@ enum StatusRastreamento {
   EM_DESMONTE
   PECAS_REAPROVEITADAS
   MATERIAL_RECICLAVEL
-  DESCARTE_FINAL
+  DESCARTE_SEGURO
   BAIXA_DEFINITIVA
 }
 
@@ -90,6 +90,7 @@ model Contrato {
   dataVencimento      DateTime
   valorTotal          Float
   renovacaoAutomatica Boolean     @default(false)
+  clausulas           Json?
   versao              Int         @default(1)
   criadoEm            DateTime    @default(now())
   atualizadoEm        DateTime    @updatedAt
@@ -98,6 +99,7 @@ model Contrato {
 model Lote {
   id                  String          @id @default(uuid())
   numeroLote          String          @unique
+  notaFiscal          String          @default("")
   organizacaoId       String
   organizacao         Organizacao     @relation(fields: [organizacaoId], references: [id])
   dataEntrada         DateTime
@@ -120,6 +122,8 @@ model Equipamento {
   estadoFisico        EstadoFisico
   precificacaoEstimada Float
   status              StatusRastreamento @default(AGUARDANDO_TRIAGEM)
+  anoFabricacao       Int                @default(2022)
+  posicaoNoLote       Int                @default(1)
   loteId              String
   lote                Lote               @relation(fields: [loteId], references: [id], onDelete: Cascade)
   versao              Int                @default(1)

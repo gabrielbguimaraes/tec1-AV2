@@ -1,5 +1,5 @@
 import { prisma, checkDatabaseConnection } from "../config/prisma";
-import { memDb, MemEquipamento, MemMovimentacao } from "./inMemoryDb";
+import { memDb, MemEquipamento, MemMovimentacao, MemJournal } from "./inMemoryDb";
 import { ConflitoError, NaoEncontradoError } from "../domain/errors/AppError";
 import { TipoEquipamento } from "../domain/enums/TipoEquipamento";
 import { EstadoFisico } from "../domain/enums/EstadoFisico";
@@ -15,6 +15,8 @@ export interface DadosCriarEquipamento {
   estadoFisico: EstadoFisico;
   precificacaoEstimada: number;
   status?: StatusRastreamento;
+  anoFabricacao?: number;
+  posicaoNoLote?: number;
 }
 
 export interface DadosAtualizarEquipamento {
@@ -88,6 +90,8 @@ export class RepositorioEquipamento {
           estadoFisico: dados.estadoFisico,
           precificacaoEstimada: dados.precificacaoEstimada,
           status: dados.status ?? StatusRastreamento.AGUARDANDO_TRIAGEM,
+          anoFabricacao: dados.anoFabricacao ?? 2022,
+          posicaoNoLote: dados.posicaoNoLote ?? 1,
           versao: 1
         },
         include: { lote: true, movimentacoes: true }
@@ -107,6 +111,8 @@ export class RepositorioEquipamento {
       estadoFisico: dados.estadoFisico,
       precificacaoEstimada: dados.precificacaoEstimada,
       status: dados.status ?? StatusRastreamento.AGUARDANDO_TRIAGEM,
+      anoFabricacao: dados.anoFabricacao ?? 2022,
+      posicaoNoLote: dados.posicaoNoLote ?? 1,
       versao: 1,
       criadoEm: agora,
       atualizadoEm: agora
@@ -182,6 +188,200 @@ export class RepositorioEquipamento {
     };
     memDb.movimentacoes.push(novaMov);
     return novaMov;
+  }
+
+  async atualizarEstadoFisicoTransacional(
+    id: string,
+    versaoEsperada: number,
+    novoEstado: EstadoFisico,
+    origem: string,
+    destino: string,
+    responsavel: string,
+    justificativa?: string,
+    ipOrigem?: string
+  ): Promise<EquipamentoComRelacoes> {
+    const atual = await this.buscarPorId(id);
+    if (!atual) throw new NaoEncontradoError("Equipamento não encontrado.");
+
+    if (atual.versao !== versaoEsperada) {
+      throw new ConflitoError(
+        `Conflito de concorrência: versão esperada ${versaoEsperada}, mas a versão atual é ${atual.versao}.`
+      );
+    }
+
+    const obs = justificativa ? `Reclassificação de estado: ${justificativa}` : "Reclassificação de estado físico";
+
+    if (await checkDatabaseConnection()) {
+      return prisma.$transaction(async (tx) => {
+        const atualizado = await tx.equipamento.update({
+          where: { id },
+          data: {
+            estadoFisico: novoEstado,
+            versao: { increment: 1 }
+          },
+          include: { lote: true, movimentacoes: true }
+        });
+
+        await tx.movimentacao.create({
+          data: {
+            equipamentoId: id,
+            origem,
+            destino,
+            responsavel,
+            observacoes: obs
+          }
+        });
+
+        await tx.journalTransacao.create({
+          data: {
+            operacao: "ATUALIZAR_ESTADO_FISICO",
+            entidade: "Equipamento",
+            operador: responsavel,
+            ipOrigem: ipOrigem ?? null,
+            dadosAntes: atual as any,
+            dadosDepois: atualizado as any,
+            sucesso: true
+          }
+        });
+
+        return atualizado as unknown as EquipamentoComRelacoes;
+      });
+    }
+
+    const index = memDb.equipamentos.findIndex((e) => e.id === id);
+    if (index === -1) throw new NaoEncontradoError("Equipamento não encontrado.");
+
+    const item = memDb.equipamentos[index];
+    const atualizado: MemEquipamento = {
+      ...item,
+      estadoFisico: novoEstado,
+      versao: item.versao + 1,
+      atualizadoEm: new Date()
+    };
+    memDb.equipamentos[index] = atualizado;
+
+    const novaMov: MemMovimentacao = {
+      id: memDb.gerarId(),
+      equipamentoId: id,
+      dataHora: new Date(),
+      origem,
+      destino,
+      responsavel,
+      observacoes: obs
+    };
+    memDb.movimentacoes.push(novaMov);
+
+    const novoJournal: MemJournal = {
+      id: memDb.gerarId(),
+      timestamp: new Date(),
+      operacao: "ATUALIZAR_ESTADO_FISICO",
+      entidade: "Equipamento",
+      operador: responsavel,
+      ipOrigem: ipOrigem ?? null,
+      dadosAntes: atual,
+      dadosDepois: atualizado,
+      sucesso: true
+    };
+    memDb.journals.push(novoJournal);
+
+    return { ...atualizado, lote: atual.lote, movimentacoes: [...atual.movimentacoes, novaMov] };
+  }
+
+  async transitarStatusTransacional(
+    id: string,
+    versaoEsperada: number,
+    novoStatus: StatusRastreamento,
+    origem: string,
+    destino: string,
+    responsavel: string,
+    observacoes?: string,
+    ipOrigem?: string
+  ): Promise<EquipamentoComRelacoes> {
+    const atual = await this.buscarPorId(id);
+    if (!atual) throw new NaoEncontradoError("Equipamento não encontrado.");
+
+    if (atual.versao !== versaoEsperada) {
+      throw new ConflitoError(
+        `Conflito de concorrência: versão esperada ${versaoEsperada}, mas a versão atual é ${atual.versao}.`
+      );
+    }
+
+    const obs = observacoes ?? `Transição de status para ${novoStatus}`;
+
+    if (await checkDatabaseConnection()) {
+      return prisma.$transaction(async (tx) => {
+        const atualizado = await tx.equipamento.update({
+          where: { id },
+          data: {
+            status: novoStatus,
+            versao: { increment: 1 }
+          },
+          include: { lote: true, movimentacoes: true }
+        });
+
+        await tx.movimentacao.create({
+          data: {
+            equipamentoId: id,
+            origem,
+            destino,
+            responsavel,
+            observacoes: obs
+          }
+        });
+
+        await tx.journalTransacao.create({
+          data: {
+            operacao: "TRANSITAR_STATUS_EQUIPAMENTO",
+            entidade: "Equipamento",
+            operador: responsavel,
+            ipOrigem: ipOrigem ?? null,
+            dadosAntes: atual as any,
+            dadosDepois: atualizado as any,
+            sucesso: true
+          }
+        });
+
+        return atualizado as unknown as EquipamentoComRelacoes;
+      });
+    }
+
+    const index = memDb.equipamentos.findIndex((e) => e.id === id);
+    if (index === -1) throw new NaoEncontradoError("Equipamento não encontrado.");
+
+    const item = memDb.equipamentos[index];
+    const atualizado: MemEquipamento = {
+      ...item,
+      status: novoStatus,
+      versao: item.versao + 1,
+      atualizadoEm: new Date()
+    };
+    memDb.equipamentos[index] = atualizado;
+
+    const novaMov: MemMovimentacao = {
+      id: memDb.gerarId(),
+      equipamentoId: id,
+      dataHora: new Date(),
+      origem,
+      destino,
+      responsavel,
+      observacoes: obs
+    };
+    memDb.movimentacoes.push(novaMov);
+
+    const novoJournal: MemJournal = {
+      id: memDb.gerarId(),
+      timestamp: new Date(),
+      operacao: "TRANSITAR_STATUS_EQUIPAMENTO",
+      entidade: "Equipamento",
+      operador: responsavel,
+      ipOrigem: ipOrigem ?? null,
+      dadosAntes: atual,
+      dadosDepois: atualizado,
+      sucesso: true
+    };
+    memDb.journals.push(novoJournal);
+
+    return { ...atualizado, lote: atual.lote, movimentacoes: [...atual.movimentacoes, novaMov] };
   }
 
   async listar(filtros?: {

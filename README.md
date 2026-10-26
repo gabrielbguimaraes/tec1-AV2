@@ -1,4 +1,11 @@
-# AV2
+# GreenCode - Plataforma de Logística Reversa de Resíduos Eletrônicos (AV2)
+
+## Identificação do Projeto Acadêmico
+- **Aluno:** João Gabriel Barros Guimarães
+- **Curso:** Desenvolvimento de Software Multiplataforma (2º DSM)
+- **Disciplina:** Técnicas de Programação I
+- **Professor:** Prof. Dr. Eng. Gerson Penha
+- **Avaliação:** Atividade de Avaliação Individual 2 (AV2)
 
 ---
 
@@ -18,13 +25,13 @@ npm install
 # 3. Aplicar o schema do banco e rodar o seed inicial
 npm run setup
 
-# 4. Executar a suíte completa de testes automatizados (25 testes)
+# 4. Executar os testes
 npm test
 
-# 5. Compilar o projeto TypeScript
+# 5. Compilar o projeto
 npm run build
 
-# 6. Iniciar o servidor HTTP em produção
+# 6. Iniciar o servidor web
 npm start
 ```
 

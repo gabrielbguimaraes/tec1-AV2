@@ -14,12 +14,15 @@ export interface DadosCriarEquipamentoLote {
   pesoKg: number;
   estadoFisico: EstadoFisico;
   precificacaoEstimada: number;
+  anoFabricacao?: number;
+  posicaoNoLote?: number;
 }
 
 export interface DadosCriarLote {
   numeroLote: string;
+  notaFiscal?: string;
   organizacaoId: string;
-  dataEntrada: Date;
+  dataEntrada: Date | string;
   transportadora: string;
   observacoes?: string | null;
   equipamentos?: DadosCriarEquipamentoLote[];
@@ -68,11 +71,14 @@ export class RepositorioLote {
       throw new ConflitoError("Número de lote já cadastrado.");
     }
 
+    const notaFiscal = dados.notaFiscal || `NF-${dados.numeroLote}`;
+
     if (await checkDatabaseConnection()) {
       return prisma.$transaction(async (tx) => {
         const lote = await tx.lote.create({
           data: {
             numeroLote: dados.numeroLote,
+            notaFiscal,
             organizacaoId: dados.organizacaoId,
             dataEntrada: new Date(dados.dataEntrada),
             transportadora: dados.transportadora,
@@ -84,6 +90,7 @@ export class RepositorioLote {
 
         const equipamentosCriados: MemEquipamento[] = [];
         if (dados.equipamentos && dados.equipamentos.length > 0) {
+          let pos = 1;
           for (const eq of dados.equipamentos) {
             const criado = await tx.equipamento.create({
               data: {
@@ -95,6 +102,8 @@ export class RepositorioLote {
                 pesoKg: eq.pesoKg,
                 estadoFisico: eq.estadoFisico,
                 precificacaoEstimada: eq.precificacaoEstimada,
+                anoFabricacao: eq.anoFabricacao ?? 2022,
+                posicaoNoLote: eq.posicaoNoLote ?? pos++,
                 status: StatusRastreamento.AGUARDANDO_TRIAGEM,
                 versao: 1
               }
@@ -111,6 +120,7 @@ export class RepositorioLote {
     const novoLote: MemLote = {
       id: memDb.gerarId(),
       numeroLote: dados.numeroLote,
+      notaFiscal,
       organizacaoId: dados.organizacaoId,
       dataEntrada: new Date(dados.dataEntrada),
       transportadora: dados.transportadora,
@@ -124,6 +134,7 @@ export class RepositorioLote {
 
     const equipamentosCriados: MemEquipamento[] = [];
     if (dados.equipamentos && dados.equipamentos.length > 0) {
+      let pos = 1;
       for (const eq of dados.equipamentos) {
         if (memDb.equipamentos.some((e) => e.codigoBarrasInterno === eq.codigoBarrasInterno)) {
           throw new ConflitoError(`Código de barras duplicado: ${eq.codigoBarrasInterno}`);
@@ -138,6 +149,8 @@ export class RepositorioLote {
           pesoKg: eq.pesoKg,
           estadoFisico: eq.estadoFisico,
           precificacaoEstimada: eq.precificacaoEstimada,
+          anoFabricacao: eq.anoFabricacao ?? 2022,
+          posicaoNoLote: eq.posicaoNoLote ?? pos++,
           status: StatusRastreamento.AGUARDANDO_TRIAGEM,
           versao: 1,
           criadoEm: agora,
@@ -149,6 +162,89 @@ export class RepositorioLote {
     }
 
     return { ...novoLote, equipamentos: equipamentosCriados };
+  }
+
+  async processarTriagemTransacional(
+    id: string,
+    versaoEsperada: number,
+    operador: string
+  ): Promise<LoteComRelacoes> {
+    const atual = await this.buscarPorId(id);
+    if (!atual) throw new NaoEncontradoError("Lote não encontrado.");
+
+    if (atual.versao !== versaoEsperada) {
+      throw new ConflitoError(
+        `Conflito de concorrência: versão esperada ${versaoEsperada}, mas a versão atual é ${atual.versao}.`
+      );
+    }
+
+    if (await checkDatabaseConnection()) {
+      return prisma.$transaction(async (tx) => {
+        const loteAtualizado = await tx.lote.update({
+          where: { id },
+          data: {
+            statusProcessamento: StatusLote.TRIAGEM_CONCLUIDA,
+            versao: { increment: 1 }
+          }
+        });
+
+        const equips = await tx.equipamento.findMany({ where: { loteId: id } });
+        for (const eq of equips) {
+          if (eq.status === StatusRastreamento.AGUARDANDO_TRIAGEM) {
+            await tx.equipamento.update({
+              where: { id: eq.id },
+              data: {
+                status: StatusRastreamento.EM_TRIAGEM,
+                versao: { increment: 1 }
+              }
+            });
+            await tx.movimentacao.create({
+              data: {
+                equipamentoId: eq.id,
+                origem: "Recepção / Almoxarifado",
+                destino: "Bancada de Triagem Técnica",
+                responsavel: operador,
+                observacoes: `Triagem técnica processada no lote ${loteAtualizado.numeroLote}`
+              }
+            });
+          }
+        }
+
+        const loteFinal = await tx.lote.findUnique({
+          where: { id },
+          include: { organizacao: true, equipamentos: { include: { movimentacoes: true } } }
+        });
+        return loteFinal as unknown as LoteComRelacoes;
+      });
+    }
+
+    const index = memDb.lotes.findIndex((l) => l.id === id);
+    if (index === -1) throw new NaoEncontradoError("Lote não encontrado.");
+
+    const item = memDb.lotes[index];
+    item.statusProcessamento = StatusLote.TRIAGEM_CONCLUIDA;
+    item.versao += 1;
+    item.atualizadoEm = new Date();
+
+    const equips = memDb.equipamentos.filter((e) => e.loteId === id);
+    for (const eq of equips) {
+      if (eq.status === StatusRastreamento.AGUARDANDO_TRIAGEM) {
+        eq.status = StatusRastreamento.EM_TRIAGEM;
+        eq.versao += 1;
+        eq.atualizadoEm = new Date();
+        memDb.movimentacoes.push({
+          id: memDb.gerarId(),
+          equipamentoId: eq.id,
+          dataHora: new Date(),
+          origem: "Recepção / Almoxarifado",
+          destino: "Bancada de Triagem Técnica",
+          responsavel: operador,
+          observacoes: `Triagem técnica processada no lote ${item.numeroLote}`
+        });
+      }
+    }
+
+    return (await this.buscarPorId(id))!;
   }
 
   async atualizarStatus(

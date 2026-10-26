@@ -1,21 +1,21 @@
 export enum EstadoFisico {
   NOVO = "NOVO",
   BOM_ESTADO = "BOM_ESTADO",
-  DESGASTADO = "DESGASTADO",
-  ESTADO_RUIM = "ESTADO_RUIM",
+  USADO_LEVE = "USADO_LEVE",
+  USADO_MODERADO = "USADO_MODERADO",
   DANIFICADO_LEVE = "DANIFICADO_LEVE",
   DANIFICADO_GRAVE = "DANIFICADO_GRAVE",
-  SUCATA_DEFINITIVA = "SUCATA_DEFINITIVA"
+  INSERVIVEL = "INSERVIVEL"
 }
 
 export const ORDEM_ESTADO_FISICO: EstadoFisico[] = [
   EstadoFisico.NOVO,
   EstadoFisico.BOM_ESTADO,
-  EstadoFisico.DESGASTADO,
-  EstadoFisico.ESTADO_RUIM,
+  EstadoFisico.USADO_LEVE,
+  EstadoFisico.USADO_MODERADO,
   EstadoFisico.DANIFICADO_LEVE,
   EstadoFisico.DANIFICADO_GRAVE,
-  EstadoFisico.SUCATA_DEFINITIVA
+  EstadoFisico.INSERVIVEL
 ];
 
 export function calcularDiferencaEstadoFisico(anterior: EstadoFisico, novo: EstadoFisico): number {

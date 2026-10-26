@@ -22,6 +22,7 @@ export async function loteRoutes(app: FastifyInstance) {
           required: ["numeroLote", "organizacaoId", "dataEntrada", "transportadora"],
           properties: {
             numeroLote: { type: "string" },
+            notaFiscal: { type: "string" },
             organizacaoId: { type: "string" },
             dataEntrada: { type: "string" },
             transportadora: { type: "string" },
@@ -38,7 +39,9 @@ export async function loteRoutes(app: FastifyInstance) {
                   modelo: { type: "string" },
                   pesoKg: { type: "number", minimum: 0.01 },
                   estadoFisico: { type: "string", enum: Object.values(EstadoFisico) },
-                  precificacaoEstimada: { type: "number", minimum: 0 }
+                  precificacaoEstimada: { type: "number", minimum: 0 },
+                  anoFabricacao: { type: "integer" },
+                  posicaoNoLote: { type: "integer" }
                 }
               }
             }

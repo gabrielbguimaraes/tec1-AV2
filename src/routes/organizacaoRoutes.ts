@@ -26,12 +26,18 @@ export async function organizacaoRoutes(app: FastifyInstance) {
             email: { type: "string", format: "email" },
             contrato: {
               type: "object",
-              required: ["dataInicio", "dataVencimento", "valorTotal"],
+              required: ["dataVencimento"],
               properties: {
                 dataInicio: { type: "string" },
+                dataAssinatura: { type: "string" },
                 dataVencimento: { type: "string" },
                 valorTotal: { type: "number" },
-                renovacaoAutomatica: { type: "boolean" }
+                valorMensal: { type: "number" },
+                renovacaoAutomatica: { type: "boolean" },
+                clausulas: {
+                  type: "array",
+                  items: { type: "string" }
+                }
               }
             }
           }
@@ -91,12 +97,18 @@ export async function organizacaoRoutes(app: FastifyInstance) {
         },
         body: {
           type: "object",
-          required: ["dataInicio", "dataVencimento", "valorTotal"],
+          required: ["dataVencimento"],
           properties: {
             dataInicio: { type: "string" },
+            dataAssinatura: { type: "string" },
             dataVencimento: { type: "string" },
             valorTotal: { type: "number" },
-            renovacaoAutomatica: { type: "boolean" }
+            valorMensal: { type: "number" },
+            renovacaoAutomatica: { type: "boolean" },
+            clausulas: {
+              type: "array",
+              items: { type: "string" }
+            }
           }
         }
       }

@@ -6,6 +6,8 @@ import {
 } from "../repositories/RepositorioOrganizacao";
 import { RepositorioJournal } from "../repositories/RepositorioJournal";
 import { ValidadorCNPJ } from "../domain/validators/ValidadorCNPJ";
+import { Organizacao } from "../domain/entities/Organizacao";
+import { Contrato } from "../domain/entities/Contrato";
 import { RequisicaoInvalidaError, NaoEncontradoError } from "../domain/errors/AppError";
 
 export class ServicoOrganizacao {
@@ -20,17 +22,43 @@ export class ServicoOrganizacao {
       throw new RequisicaoInvalidaError(this.validadorCNPJ.obterMensagemErro());
     }
 
-    if (!dados.razaoSocial || !dados.razaoSocial.trim()) {
-      throw new RequisicaoInvalidaError("Razão social é obrigatória.");
-    }
+    try {
+      const orgEntidade = new Organizacao(
+        "",
+        dados.razaoSocial,
+        dados.cnpj,
+        dados.inscricaoEstadual,
+        dados.enderecoCompleto,
+        dados.telefone,
+        dados.email
+      );
 
-    if (dados.contrato) {
-      if (new Date(dados.contrato.dataVencimento) <= new Date(dados.contrato.dataInicio)) {
-        throw new RequisicaoInvalidaError("Data de vencimento do contrato deve ser posterior à data de início.");
+      if (dados.contrato) {
+        const dataInicio = new Date(dados.contrato.dataInicio || dados.contrato.dataAssinatura || new Date());
+        const dataVencimento = new Date(dados.contrato.dataVencimento);
+        const valorTotal = dados.contrato.valorTotal ?? dados.contrato.valorMensal ?? 0;
+
+        if (dataVencimento <= dataInicio) {
+          throw new Error("Data de vencimento do contrato deve ser posterior à data de início.");
+        }
+        if (valorTotal < 0) {
+          throw new Error("Valor total do contrato não pode ser negativo.");
+        }
+
+        const contratoEntidade = new Contrato(
+          "",
+          "",
+          dataInicio,
+          dataVencimento,
+          valorTotal,
+          dados.contrato.renovacaoAutomatica ?? false,
+          1,
+          dados.contrato.clausulas ?? []
+        );
+        orgEntidade.vincularContrato(contratoEntidade);
       }
-      if (dados.contrato.valorTotal < 0) {
-        throw new RequisicaoInvalidaError("Valor total do contrato não pode ser negativo.");
-      }
+    } catch (err: any) {
+      throw new RequisicaoInvalidaError(err.message);
     }
 
     const orgCriada = await this.repoOrganizacao.criar(dados);
@@ -64,6 +92,29 @@ export class ServicoOrganizacao {
       throw new NaoEncontradoError("Organização não encontrada.");
     }
 
+    const orgEntidade = new Organizacao(
+      anterior.id,
+      anterior.razaoSocial,
+      anterior.cnpj,
+      anterior.inscricaoEstadual,
+      anterior.enderecoCompleto,
+      anterior.telefone,
+      anterior.email,
+      anterior.ativo,
+      anterior.versao
+    );
+
+    if (dados.enderecoCompleto) {
+      try {
+        orgEntidade.alterarEndereco(dados.enderecoCompleto);
+      } catch (err: any) {
+        throw new RequisicaoInvalidaError(err.message);
+      }
+    }
+    if (dados.ativo === false) {
+      orgEntidade.desativar();
+    }
+
     const atualizada = await this.repoOrganizacao.atualizar(id, versaoEsperada, dados);
 
     await this.repoJournal.registrar({
@@ -85,9 +136,24 @@ export class ServicoOrganizacao {
     operador: string,
     ipOrigem?: string
   ) {
-    if (new Date(dadosContrato.dataVencimento) <= new Date(dadosContrato.dataInicio)) {
+    const dataInicio = new Date(dadosContrato.dataInicio || dadosContrato.dataAssinatura || new Date());
+    const dataVencimento = new Date(dadosContrato.dataVencimento);
+    const valorTotal = dadosContrato.valorTotal ?? dadosContrato.valorMensal ?? 0;
+
+    if (dataVencimento <= dataInicio) {
       throw new RequisicaoInvalidaError("Data de vencimento do contrato deve ser posterior à data de início.");
     }
+
+    const contratoEntidade = new Contrato(
+      "",
+      organizacaoId,
+      dataInicio,
+      dataVencimento,
+      valorTotal,
+      dadosContrato.renovacaoAutomatica ?? false,
+      1,
+      dadosContrato.clausulas ?? []
+    );
 
     const contrato = await this.repoOrganizacao.vincularContrato(organizacaoId, dadosContrato);
 

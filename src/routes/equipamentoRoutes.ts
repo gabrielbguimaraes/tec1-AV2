@@ -29,6 +29,8 @@ export async function equipamentoRoutes(app: FastifyInstance) {
             pesoKg: { type: "number", minimum: 0.01 },
             estadoFisico: { type: "string", enum: Object.values(EstadoFisico) },
             precificacaoEstimada: { type: "number", minimum: 0 },
+            anoFabricacao: { type: "integer" },
+            posicaoNoLote: { type: "integer" },
             status: { type: "string", enum: Object.values(StatusRastreamento) }
           }
         }

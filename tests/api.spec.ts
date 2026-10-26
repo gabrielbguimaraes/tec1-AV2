@@ -7,8 +7,12 @@ import { StatusLote } from "../src/domain/enums/StatusLote";
 import { StatusRastreamento } from "../src/domain/enums/StatusRastreamento";
 import { EstadoFisico } from "../src/domain/enums/EstadoFisico";
 import { TipoEquipamento } from "../src/domain/enums/TipoEquipamento";
+import { Lote } from "../src/domain/entities/Lote";
+import { Equipamento } from "../src/domain/entities/Equipamento";
+import { Contrato } from "../src/domain/entities/Contrato";
+import { Credencial } from "../src/domain/entities/Credencial";
 
-describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", () => {
+describe("GreenCode API - Testes de Integração e Domínio POO da AV2", () => {
   let app: FastifyInstance;
   let tokenAdmin: string;
   let tokenOperador: string;
@@ -53,7 +57,73 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
     await app.close();
   });
 
-  describe("1. Autenticação e JWT Stateless", () => {
+  describe("1. Métodos de Domínio POO e Interface Autenticavel", () => {
+    it("deve executar métodos de negócio na entidade Lote (adicionar, remover, peso e relatório)", () => {
+      const lote = new Lote(
+        "lote-1",
+        "LOTE-TEST-POO",
+        "org-1",
+        new Date(),
+        "Transportes POO",
+        StatusLote.RECEBIDO,
+        "Observação",
+        1,
+        "NF-998877"
+      );
+
+      const eq1 = new Equipamento(
+        "eq-1",
+        "CB-001",
+        TipoEquipamento.CABO_ESTRUTURADO,
+        "Furukawa",
+        "Cat6",
+        5.5,
+        EstadoFisico.NOVO,
+        350.0
+      );
+      const eq2 = new Equipamento(
+        "eq-2",
+        "CB-002",
+        TipoEquipamento.NOTEBOOK,
+        "Dell",
+        "Latitude",
+        2.0,
+        EstadoFisico.BOM_ESTADO,
+        2500.0
+      );
+
+      lote.adicionarEquipamento(eq1);
+      lote.adicionarEquipamento(eq2);
+      expect(lote.calcularPesoTotal()).toBe(7.5);
+
+      const relatorio = lote.gerarRelatorioTriagem();
+      expect(relatorio).toContain("LOTE-TEST-POO");
+      expect(relatorio).toContain("NF-998877");
+      expect(relatorio).toContain("7.5 kg");
+
+      const removido = lote.removerEquipamento("eq-1");
+      expect(removido).toBe(true);
+      expect(lote.calcularPesoTotal()).toBe(2.0);
+    });
+
+    it("deve validar métodos de negócio em Contrato e Credencial", () => {
+      const hoje = new Date();
+      const futuro = new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const contrato = new Contrato("c-1", "org-1", hoje, futuro, 12000, true, 1, ["Clausula 1"]);
+
+      expect(contrato.estaVigente()).toBe(true);
+
+      const novoVencimento = new Date(futuro.getTime() + 60 * 24 * 60 * 60 * 1000);
+      contrato.renovar(novoVencimento);
+      expect(contrato.dataVencimento.getTime()).toBe(novoVencimento.getTime());
+
+      const cred = new Credencial("user-1", "usuario_teste", "hash", PapelUsuario.AUDITOR);
+      const tokenRenovado = cred.renovarToken();
+      expect(tokenRenovado).toContain("session_user-1_");
+    });
+  });
+
+  describe("2. Autenticação e JWT Stateless", () => {
     it("deve autenticar os 4 perfis de usuários com sucesso", () => {
       expect(tokenAdmin).toBeDefined();
       expect(tokenOperador).toBeDefined();
@@ -91,7 +161,7 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
     });
   });
 
-  describe("2. RBAC (Controle de Acesso Baseado em Papel)", () => {
+  describe("3. RBAC (Controle de Acesso Baseado em Papel)", () => {
     it("ADMINISTRADOR pode cadastrar novos usuários", async () => {
       const res = await app.inject({
         method: "POST",
@@ -177,7 +247,7 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
     });
   });
 
-  describe("3. Regras de Negócio de Organização e CNPJ (Módulo 11)", () => {
+  describe("4. Regras de Negócio de Organização e CNPJ (Módulo 11)", () => {
     it("deve rejeitar cadastro com CNPJ matematicamente inválido (HTTP 400)", async () => {
       const res = await app.inject({
         method: "POST",
@@ -212,7 +282,8 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
             dataInicio: new Date().toISOString(),
             dataVencimento: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
             valorTotal: 50000.0,
-            renovacaoAutomatica: true
+            renovacaoAutomatica: true,
+            clausulas: ["Clausula LGPD", "Clausula PNRS"]
           }
         }
       });
@@ -241,7 +312,7 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
     });
   });
 
-  describe("4. Regras de Negócio de Lote e Janela Temporal (90 dias)", () => {
+  describe("5. Regras de Negócio de Lote e Janela Temporal (90 dias)", () => {
     let orgId: string;
 
     beforeAll(async () => {
@@ -288,7 +359,7 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
       expect(JSON.parse(res.body).mensagem).toContain("90 dias");
     });
 
-    it("deve cadastrar lote válido com data dentro da janela temporal de 90 dias", async () => {
+    it("deve cadastrar lote válido com notaFiscal e equipamento com anoFabricacao e posicaoNoLote", async () => {
       const dataValida = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
       const res = await app.inject({
         method: "POST",
@@ -296,18 +367,21 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
         headers: { authorization: `Bearer ${tokenGestor}` },
         payload: {
           numeroLote: "LOTE-VALIDO-001",
+          notaFiscal: "NF-990011",
           organizacaoId: orgId,
           dataEntrada: dataValida,
           transportadora: "Transportadora Rápida",
           equipamentos: [
             {
               codigoBarrasInterno: "EQ-TEST-001",
-              tipo: TipoEquipamento.NOTEBOOK,
-              marca: "Dell",
-              modelo: "Latitude 5400",
-              pesoKg: 1.8,
+              tipo: TipoEquipamento.CABO_ESTRUTURADO,
+              marca: "Nexans",
+              modelo: "Cat6 UTP",
+              pesoKg: 3.2,
               estadoFisico: EstadoFisico.BOM_ESTADO,
-              precificacaoEstimada: 1500.0
+              precificacaoEstimada: 800.0,
+              anoFabricacao: 2023,
+              posicaoNoLote: 1
             }
           ]
         }
@@ -315,11 +389,13 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
       expect(res.statusCode).toBe(201);
       const data = JSON.parse(res.body);
       expect(data.numeroLote).toBe("LOTE-VALIDO-001");
+      expect(data.notaFiscal).toBe("NF-990011");
       expect(data.equipamentos.length).toBe(1);
+      expect(data.equipamentos[0].anoFabricacao).toBe(2023);
     });
   });
 
-  describe("5. Máquina de Estados e Degradação Severa de Equipamento", () => {
+  describe("6. Máquina de Estados e Degradação Severa de Equipamento", () => {
     let equipamentoId: string;
     let loteId: string;
 
@@ -423,7 +499,7 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
         payload: {
           versao: eq.versao,
           estadoFisico: EstadoFisico.DANIFICADO_GRAVE,
-          justificativa: "Placa-mãe trincada e carcaça rompida durante transporte"
+          justificativa: "Conector rompido e isolamento danificado durante transporte"
         }
       });
       expect(res.statusCode).toBe(200);
@@ -431,7 +507,7 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
       expect(data.estadoFisico).toBe(EstadoFisico.DANIFICADO_GRAVE);
     });
 
-    it("deve calcular depreciação correta conforme estado físico", async () => {
+    it("deve calcular depreciação correta conforme novo mapa de estado físico", async () => {
       const res = await app.inject({
         method: "GET",
         url: `/equipamentos/${equipamentoId}/depreciacao`,
@@ -445,7 +521,7 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
     });
   });
 
-  describe("6. Versionamento Otimista e Conflito de Concorrência (HTTP 409)", () => {
+  describe("7. Versionamento Otimista e Conflito de Concorrência (HTTP 409)", () => {
     it("deve lançar HTTP 409 caso a versão informada na atualização seja desatualizada", async () => {
       const resOrgs = await app.inject({
         method: "GET",
@@ -468,7 +544,7 @@ describe("GreenCode API - Testes de Integração e Regras de Negócio da AV2", (
     });
   });
 
-  describe("7. Relatórios, Rastreabilidade e Auditoria", () => {
+  describe("8. Relatórios, Rastreabilidade e Auditoria", () => {
     it("deve gerar relatório geral consolidado com sucesso", async () => {
       const res = await app.inject({
         method: "GET",

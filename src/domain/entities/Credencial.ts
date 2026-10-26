@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
 import { Autenticavel } from "../interfaces/Autenticavel";
 import { PapelUsuario } from "../enums/PapelUsuario";
 
@@ -20,6 +21,10 @@ export class Credencial implements Autenticavel {
 
   obterIdentificador(): string {
     return this.id;
+  }
+
+  renovarToken(): string {
+    return `session_${this.id}_${randomUUID()}`;
   }
 
   atualizarUltimoAcesso(): void {

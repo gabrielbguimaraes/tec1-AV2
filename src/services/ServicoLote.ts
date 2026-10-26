@@ -1,29 +1,56 @@
 import { RepositorioLote, DadosCriarLote } from "../repositories/RepositorioLote";
-import { RepositorioEquipamento } from "../repositories/RepositorioEquipamento";
 import { RepositorioJournal } from "../repositories/RepositorioJournal";
-import { ValidadorDataEntrada } from "../domain/validators/ValidadorDataEntrada";
+import { Lote } from "../domain/entities/Lote";
+import { Equipamento } from "../domain/entities/Equipamento";
 import { StatusLote } from "../domain/enums/StatusLote";
-import { StatusRastreamento } from "../domain/enums/StatusRastreamento";
 import { RequisicaoInvalidaError, NaoEncontradoError } from "../domain/errors/AppError";
 
 export class ServicoLote {
   constructor(
     private repoLote: RepositorioLote = new RepositorioLote(),
-    private repoEquipamento: RepositorioEquipamento = new RepositorioEquipamento(),
-    private repoJournal: RepositorioJournal = new RepositorioJournal(),
-    private validadorDataEntrada: ValidadorDataEntrada = new ValidadorDataEntrada()
+    private repoJournal: RepositorioJournal = new RepositorioJournal()
   ) {}
 
   async cadastrarLote(dados: DadosCriarLote, operador: string, ipOrigem?: string) {
-    if (!this.validadorDataEntrada.validar(dados.dataEntrada)) {
-      throw new RequisicaoInvalidaError(this.validadorDataEntrada.obterMensagemErro());
-    }
-
     if (!dados.numeroLote || !dados.numeroLote.trim()) {
       throw new RequisicaoInvalidaError("Número do lote é obrigatório.");
     }
     if (!dados.organizacaoId) {
       throw new RequisicaoInvalidaError("ID da organização é obrigatório.");
+    }
+
+    try {
+      const loteEntidade = new Lote(
+        "",
+        dados.numeroLote,
+        dados.organizacaoId,
+        new Date(dados.dataEntrada),
+        dados.transportadora,
+        StatusLote.RECEBIDO,
+        dados.observacoes,
+        1,
+        dados.notaFiscal || ""
+      );
+
+      loteEntidade.garantirJanelaTemporal();
+
+      if (dados.equipamentos) {
+        for (const eq of dados.equipamentos) {
+          const eqEntidade = new Equipamento(
+            "",
+            eq.codigoBarrasInterno,
+            eq.tipo,
+            eq.marca,
+            eq.modelo,
+            eq.pesoKg,
+            eq.estadoFisico,
+            eq.precificacaoEstimada
+          );
+          loteEntidade.adicionarEquipamento(eqEntidade);
+        }
+      }
+    } catch (err: any) {
+      throw new RequisicaoInvalidaError(err.message);
     }
 
     const loteCriado = await this.repoLote.criar(dados);
@@ -45,26 +72,7 @@ export class ServicoLote {
     const lote = await this.repoLote.buscarPorId(id);
     if (!lote) throw new NaoEncontradoError("Lote não encontrado.");
 
-    const loteAtualizado = await this.repoLote.atualizarStatus(
-      id,
-      versaoEsperada,
-      StatusLote.TRIAGEM_CONCLUIDA
-    );
-
-    for (const eq of lote.equipamentos) {
-      if (eq.status === StatusRastreamento.AGUARDANDO_TRIAGEM) {
-        await this.repoEquipamento.atualizar(eq.id, eq.versao, {
-          status: StatusRastreamento.EM_TRIAGEM
-        });
-        await this.repoEquipamento.registrarMovimentacao({
-          equipamentoId: eq.id,
-          origem: "Recepção / Almoxarifado",
-          destino: "Bancada de Triagem Técnica",
-          responsavel: operador,
-          observacoes: `Triagem processada no lote ${lote.numeroLote}`
-        });
-      }
-    }
+    const loteAtualizado = await this.repoLote.processarTriagemTransacional(id, versaoEsperada, operador);
 
     await this.repoJournal.registrar({
       operacao: "PROCESSAR_TRIAGEM_LOTE",
@@ -76,7 +84,7 @@ export class ServicoLote {
       sucesso: true
     });
 
-    return this.repoLote.buscarPorId(id);
+    return loteAtualizado;
   }
 
   async atualizarStatus(
@@ -88,6 +96,20 @@ export class ServicoLote {
   ) {
     const anterior = await this.repoLote.buscarPorId(id);
     if (!anterior) throw new NaoEncontradoError("Lote não encontrado.");
+
+    const loteEntidade = new Lote(
+      anterior.id,
+      anterior.numeroLote,
+      anterior.organizacaoId,
+      anterior.dataEntrada,
+      anterior.transportadora,
+      anterior.statusProcessamento,
+      anterior.observacoes,
+      anterior.versao,
+      anterior.notaFiscal
+    );
+
+    loteEntidade.atualizarStatus(novoStatus);
 
     const atualizado = await this.repoLote.atualizarStatus(id, versaoEsperada, novoStatus);
 

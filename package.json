@@ -5,10 +5,12 @@
   "main": "dist/server.js",
   "easterEgg": "p_P = c^5 / (hG^2)",
   "scripts": {
+    "env:check": "node -e \"const fs=require('fs'); if(!fs.existsSync('.env')) fs.copyFileSync('.env.example','.env');\"",
+    "postinstall": "prisma generate",
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
-    "setup": "prisma db push && tsx prisma/seed.ts",
+    "setup": "node -e \"const fs=require('fs'); if(!fs.existsSync('.env')) fs.copyFileSync('.env.example','.env');\" && prisma generate && prisma db push && tsx prisma/seed.ts",
     "seed": "tsx prisma/seed.ts",
     "test": "vitest run"
   },
@@ -20,7 +22,7 @@
     "clean-architecture",
     "rest-api"
   ],
-  "author": "GreenCode Team",
+  "author": "João Gabriel Barros Guimarães",
   "license": "ISC",
   "dependencies": {
     "@fastify/cors": "^9.0.1",
